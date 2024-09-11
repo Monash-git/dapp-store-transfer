@@ -1,0 +1,9 @@
+echo "node_modules
+.env
+artifacts
+cache
+*.log
+__pycache__
+*.pyc" > .gitignore
+node_modules
+node_modules

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store and Transfer</title>
+    <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Varela+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Store and Transfer</h1>
+        <h2>Hi, {{r}}, how can I help you today?</h2>
+        <div id="wallet-status">
+            <p>Wallet Status: <span id="connection-status">Not Connected</span></p>
+            <button onclick="connectWallet()">Connect Wallet</button>
+        </div>
+        <div class="button-group">
+            <a href="/store_money" class="button">Store Money</a>
+            <a href="/transfer_money" class="button">Transfer Money</a>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+        let provider;
+        let signer;
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    signer = provider.getSigner();
+                    const address = await signer.getAddress();
+                    document.getElementById('connection-status').innerText = `Connected (${address.slice(0,6)}...${address.slice(-4)})`;
+                    localStorage.setItem('walletConnected', 'true');
+                } catch (error) {
+                    console.error("Error connecting wallet:", error);
+                    alert("Failed to connect wallet.");
+                }
+            } else {
+                alert("Please install MetaMask!");
+            }
+        }
+
+        window.onload = function() {
+            if (localStorage.getItem('walletConnected') === 'true') {
+                connectWallet();
+            }
+        }
+    </script>
+</body>
+</html>

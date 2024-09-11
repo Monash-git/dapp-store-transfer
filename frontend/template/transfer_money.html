@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store and Transfer - Transfer Money</title>
+    <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Varela+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Store and Transfer</h1>
+        <h2>Welcome to Transfer Money</h2>
+        <div id="wallet-info">
+            <p>Wallet ETH Balance: <span id="wallet-eth-balance">Not Connected</span></p>
+            <p>Wallet LINK Balance: <span id="wallet-link-balance">Not Connected</span></p>
+            <p>Stored ETH Balance: <span id="stored-eth-balance">Not Connected</span></p>
+        </div>
+        <div class="form-group transfer-form">
+            <input type="text" id="recipient" placeholder="Recipient Address">
+            <input type="number" id="transfer-amount" min="0" step="0.001" placeholder="Amount (ETH)">
+            <button onclick="transferValue()" class="transfer-button">Transfer</button>
+        </div>
+        <div class="form-group">
+            <button onclick="viewTransactions()">View Transactions</button>
+            <div id="transactions"></div>
+        </div>
+        <div id="transaction-info"></div>
+        <a href="/main" class="button">Back to Main</a>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+        const contractAddress = "0xD306EE4271c6FC7F87D587a00d00B15746C3d174";
+        const contractABI = [
+            "function transferValue(address payable to, uint256 amount) external",
+            "function getStoredValue() external view returns (uint256)"
+        ];
+        const linkTokenAddress = "0x779877A7B0D9E8603169DdbD7836e478b4624789"; // Sepolia Chain Link Token address
+        const linkTokenABI = [
+            "function balanceOf(address account) external view returns (uint256)"
+        ];
+
+        let provider;
+        let signer;
+        let contract;
+        let linkToken;
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = provider.getSigner();
+                contract = new ethers.Contract(contractAddress, contractABI, signer);
+                linkToken = new ethers.Contract(linkTokenAddress, linkTokenABI, signer);
+                updateWalletInfo();
+            } else {
+                alert("Please install MetaMask!");
+            }
+        }
+
+        async function updateWalletInfo() {
+            const address = await signer.getAddress();
+            const ethBalance = await provider.getBalance(address);
+            const linkBalance = await linkToken.balanceOf(address);
+            const storedValue = await contract.getStoredValue();
+            
+            document.getElementById('wallet-eth-balance').innerText = `${ethers.utils.formatEther(ethBalance)} ETH`;
+            document.getElementById('wallet-link-balance').innerText = `${ethers.utils.formatEther(linkBalance)} LINK`;
+            document.getElementById('stored-eth-balance').innerText = `${ethers.utils.formatEther(storedValue)} ETH`;
+        }
+
+        async function transferValue() {
+            const recipient = document.getElementById('recipient').value;
+            const amount = document.getElementById('transfer-amount').value;
+            try {
+                const address = await signer.getAddress();
+                const ethBalance = await provider.getBalance(address);
+                
+                if (ethers.utils.parseEther(amount).gt(ethBalance)) {
+                    alert("Insufficient wallet balance for this transfer.");
+                    return;
+                }
+
+                const tx = await signer.sendTransaction({
+                    to: recipient,
+                    value: ethers.utils.parseEther(amount)
+                });
+                await tx.wait();
+                alert("Value transferred successfully!");
+                updateWalletInfo();
+                // Remove the call to displayTransactionInfo here
+            } catch (error) {
+                console.error("Error:", error);
+                alert("An error occurred while transferring the value.");
+            }
+        }
+
+        async function viewTransactions() {
+            if (typeof window.ethereum !== 'undefined') {
+                const address = await signer.getAddress();
+                const transactions = await provider.getHistory(address);
+                const transactionsDiv = document.getElementById('transactions');
+                transactionsDiv.innerHTML = "<h3>Recent Transactions:</h3>";
+                transactions.slice(0, 5).forEach((tx, index) => {
+                    transactionsDiv.innerHTML += `<p>${index + 1}. ${tx.hash}</p>`;
+                });
+                // Display transaction info after viewing transactions
+                if (transactions.length > 0) {
+                    const latestTx = transactions[0];
+                    displayTransactionInfo(latestTx.from, latestTx.to, ethers.utils.formatEther(latestTx.value));
+                }
+            } else {
+                alert("Please install MetaMask!");
+            }
+        }
+
+        function displayTransactionInfo(sender, receiver, amount) {
+            const transactionInfo = document.getElementById('transaction-info');
+            transactionInfo.style.display = 'block';
+            transactionInfo.innerHTML = `
+                <h3>Transaction Information:</h3>
+                <p>Sender: ${sender}</p>
+                <p>Receiver: ${receiver}</p>
+                <p>Amount: ${amount} ETH</p>
+            `;
+        }
+
+        window.onload = function() {
+            if (localStorage.getItem('walletConnected') === 'true') {
+                connectWallet();
+            }
+        }
+    </script>
+</body>
+</html>
