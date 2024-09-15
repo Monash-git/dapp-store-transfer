@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ethereum DApp 5 - Transfer Money</title>
+    <title>Store and Transfer - Transfer Money</title>
     <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Varela+Round" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <h1>Ethereum DApp 5</h1>
-        <h2>Welcome to Transfer Money v2</h2>
+        <h1>Store and Transfer</h1>
+        <h2>Welcome to Transfer Money</h2>
         <div id="wallet-info">
             <p>Wallet ETH Balance: <span id="wallet-eth-balance">Not Connected</span></p>
             <p>Wallet LINK Balance: <span id="wallet-link-balance">Not Connected</span></p>
@@ -40,114 +40,99 @@
         const linkTokenABI = [
             "function balanceOf(address account) external view returns (uint256)"
         ];
-
+    
         let provider;
         let signer;
         let contract;
         let linkToken;
-
+    
         async function connectWallet() {
             if (typeof window.ethereum !== 'undefined') {
-                try {
-                    provider = new ethers.providers.Web3Provider(window.ethereum);
-                    await provider.send("eth_requestAccounts", []);
-                    signer = provider.getSigner();
-                    contract = new ethers.Contract(contractAddress, contractABI, signer);
-                    linkToken = new ethers.Contract(linkTokenAddress, linkTokenABI, signer);
-                    await updateWalletInfo();
-                } catch (error) {
-                    console.error("Error connecting wallet:", error);
-                    alert("Failed to connect wallet.");
-                }
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = provider.getSigner();
+                contract = new ethers.Contract(contractAddress, contractABI, signer);
+                linkToken = new ethers.Contract(linkTokenAddress, linkTokenABI, signer);
+                updateWalletInfo();
             } else {
                 alert("Please install MetaMask!");
             }
         }
-
+    
         async function updateWalletInfo() {
-            try {
-                const address = await signer.getAddress();
-                const ethBalance = await provider.getBalance(address);
-                const linkBalance = await linkToken.balanceOf(address);
-                const storedValue = await contract.getStoredValue();
-                
-                document.getElementById('wallet-eth-balance').innerText = `${ethers.utils.formatEther(ethBalance)} ETH`;
-                document.getElementById('wallet-link-balance').innerText = `${ethers.utils.formatEther(linkBalance)} LINK`;
-                document.getElementById('stored-eth-amount').innerText = `${ethers.utils.formatEther(storedValue)} ETH`;
-            } catch (error) {
-                console.error("Error updating wallet info:", error);
-            }
+            const address = await signer.getAddress();
+            const ethBalance = await provider.getBalance(address);
+            const linkBalance = await linkToken.balanceOf(address);
+            const storedValue = await contract.getStoredValue();
+            
+            document.getElementById('wallet-eth-balance').innerText = `${ethers.utils.formatEther(ethBalance)} ETH`;
+            document.getElementById('wallet-link-balance').innerText = `${ethers.utils.formatEther(linkBalance)} LINK`;
+            document.getElementById('stored-eth-balance').innerText = `${ethers.utils.formatEther(storedValue)} ETH`;
         }
-
+    
         async function transferValue() {
             const recipient = document.getElementById('recipient').value;
             const amount = document.getElementById('transfer-amount').value;
-            if (!ethers.utils.isAddress(recipient)) {
-                alert("Invalid recipient address.");
-                return;
-            }
             try {
-                const tx = await contract.transferValue(recipient, ethers.utils.parseEther(amount));
+                const address = await signer.getAddress();
+                const ethBalance = await provider.getBalance(address);
+                
+                if (ethers.utils.parseEther(amount).gt(ethBalance)) {
+                    alert("Insufficient wallet balance for this transfer.");
+                    return;
+                }
+    
+                const tx = await signer.sendTransaction({
+                    to: recipient,
+                    value: ethers.utils.parseEther(amount)
+                });
                 await tx.wait();
                 alert("Value transferred successfully!");
-                await updateWalletInfo();
+                updateWalletInfo();
+    
+                // 保存交易信息到localStorage
+                const transaction = {
+                    sender: address,
+                    receiver: recipient,
+                    amount: amount,
+                    txHash: tx.hash
+                };
+                saveTransaction(transaction);
+    
             } catch (error) {
                 console.error("Error:", error);
                 alert("An error occurred while transferring the value.");
             }
         }
-
-        async function viewTransactions() {
-            if (typeof window.ethereum !== 'undefined') {
-                try {
-                    const address = await signer.getAddress();
-                    console.log("Fetching transactions for address:", address);
-                    const transactions = await provider.getHistory(address);
-                    console.log("Transactions fetched:", transactions);
-
-                    if (transactions.length === 0) {
-                        document.getElementById('transactions').innerHTML = "<p>No transactions found.</p>";
-                        return;
-                    }
-
-                    // 过滤与智能合约相关的交易
-                    const contractTransactions = transactions.filter(tx => tx.to && tx.to.toLowerCase() === contractAddress.toLowerCase());
-
-                    if (contractTransactions.length === 0) {
-                        document.getElementById('transactions').innerHTML = "<p>No transactions with the contract found.</p>";
-                        return;
-                    }
-
-                    // 仅展示最近5笔交易
-                    const recentTxs = contractTransactions.slice(-5).reverse();
-
-                    const transactionsDiv = document.getElementById('transactions');
-                    transactionsDiv.innerHTML = "<h3>Recent Transactions:</h3>";
-
-                    recentTxs.forEach((tx, index) => {
-                        const sender = tx.from;
-                        const receiver = tx.to;
-                        const amount = ethers.utils.formatEther(tx.value);
-                        transactionsDiv.innerHTML += `
-                            <div class="transaction">
-                                <p><strong>Transaction ${index + 1}:</strong></p>
-                                <p>Sender: ${sender}</p>
-                                <p>Receiver: ${receiver}</p>
-                                <p>Amount: ${amount} ETH</p>
-                                <hr>
-                            </div>
-                        `;
-                    });
-
-                } catch (error) {
-                    console.error("Error fetching transactions:", error);
-                    alert("An error occurred while fetching transactions.");
-                }
-            } else {
-                alert("Please install MetaMask!");
-            }
+    
+        function saveTransaction(transaction) {
+            let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+            transactions.unshift(transaction); // 将新交易添加到数组开头
+            localStorage.setItem('transactions', JSON.stringify(transactions));
         }
-
+    
+        function viewTransactions() {
+            let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+            const transactionsDiv = document.getElementById('transactions');
+            transactionsDiv.innerHTML = "<h3>Recent Transactions:</h3>";
+    
+            if (transactions.length === 0) {
+                transactionsDiv.innerHTML += "<p>No transactions found.</p>";
+                return;
+            }
+    
+            transactions.slice(0, 5).forEach((tx, index) => {
+                transactionsDiv.innerHTML += `
+                    <p>${index + 1}.</p>
+                    <p>Sender: ${tx.sender}</p>
+                    <p>Receiver: ${tx.receiver}</p>
+                    <p>Amount: ${tx.amount} ETH</p>
+                    <p>Transaction Hash: <a href="https://sepolia.etherscan.io/tx/${tx.txHash}" target="_blank">${tx.txHash}</a></p>
+                    <hr>
+                `;
+            });
+        }
+    
         window.onload = function() {
             if (localStorage.getItem('walletConnected') === 'true') {
                 connectWallet();
